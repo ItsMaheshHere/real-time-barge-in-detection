@@ -1,17 +1,17 @@
 import sounddevice as sd
+import numpy as np
 
 SAMPLE_RATE = 16000
 CHANNELS = 1
 CHUNK_SIZE = 320
 
-#for error/warning reporting
+#for error/warning reporting and Calculate RMS
 def audio_callback(indata, frames, time, status):
     if status:
         print(f"Audio status: {status}")
 
-    print(f"Frames {frames}")
-    print(f"Shape {indata.shape}")
-    print(f"Samples {indata[:5]}")
+    audio_level = np.sqrt(np.mean(indata ** 2))
+    print(f"Audio levels: {audio_level:.4f}")
 
 def start_audio_stream():
     print("Starting microphone...")
