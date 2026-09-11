@@ -1,38 +1,43 @@
+import sys
+from pathlib import Path
 import sounddevice as sd
-import webrtcvad
+import numpy as np
 
+# Add src directory to path so we can import our new package
+src_path = str(Path(__file__).parent.parent / "src")
+if src_path not in sys.path:
+    sys.path.append(src_path)
+
+from bargein.vad import SileroVAD
 
 SAMPLE_RATE = 16000
-FRAME_DURATION_MS = 20
+# Silero VAD typically works best with 512 samples (32ms) at 16kHz
+FRAME_SIZE = 512
 CHANNELS = 1
 
-FRAME_SIZE = SAMPLE_RATE * FRAME_DURATION_MS // 1000
-
-vad = webrtcvad.Vad(3)
-
+vad = SileroVAD(sample_rate=SAMPLE_RATE, threshold=0.5)
 
 def audio_callback(indata, frames, time, status):
     if status:
         print(f"Audio status: {status}")
 
-    audio_bytes = indata.tobytes()
-
-    is_speech = vad.is_speech(audio_bytes, SAMPLE_RATE)
-
-    if is_speech:
-        print("HUMAN")
+    # indata is shape (frames, channels), e.g. (512, 1). We need a 1D array.
+    audio_chunk = indata[:, 0]
+    
+    # Get the exact probability from our new class
+    prob = vad.get_speech_probability(audio_chunk)
+    
+    bar = "█" * int(prob * 20)
+    if prob >= 0.5:
+        print(f"HUMAN     [{bar:<20}] {prob:.3f}")
     else:
-        print("NOT HUMAN")
+        print(f"NOT HUMAN [{bar:<20}] {prob:.3f}")
 
-
-print("Starting microphone VAD...")
-print("Speak into the microphone.")
-print("Press Ctrl+C to stop.")
 
 with sd.InputStream(
     samplerate=SAMPLE_RATE,
     channels=CHANNELS,
-    dtype="int16",
+    dtype="float32",  # Silero uses float32 instead of int16
     blocksize=FRAME_SIZE,
     callback=audio_callback,
 ):
