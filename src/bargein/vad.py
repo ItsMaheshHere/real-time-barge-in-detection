@@ -51,3 +51,8 @@ class VADFilter:
                 self.is_currently_speaking = False
 
         return self.is_currently_speaking
+
+    def reset(self):
+        self.speech_frame_count = 0
+        self.silence_frame_count = 0
+        self.is_currently_speaking = False
