@@ -1,4 +1,5 @@
 import sys
+import collections
 import queue
 import threading
 from pathlib import Path
@@ -30,6 +31,8 @@ class VoiceAssistant:
         self.tts = EdgeTTS()
         self.barge_in_detector = BargeInDetector(self.tts, self.vad_filter)
 
+        # Keeps the last 15 frames in memory
+        self.lookback_buffer = collections.deque(maxlen=15)
         self.audio_buffer = []
         self.was_speaking = False
 
@@ -41,6 +44,7 @@ class VoiceAssistant:
             print(f"Audio status: {status}")
 
         audio_chunk = indata[:, 0].copy()
+        self.lookback_buffer.append(audio_chunk)
 
         prob = self.vad.get_speech_probability(audio_chunk)
         is_confirmed = self.vad_filter.process(prob >= 0.5)
@@ -49,10 +53,16 @@ class VoiceAssistant:
         if self.barge_in_detector.check_barge_in(is_confirmed):
             # The user just interrupted! Clear old audio and start recording them instantly.
             self.audio_buffer = []
+            # Grab the past ~480ms
+            self.audio_buffer.extend(list(self.lookback_buffer)[:-1])
+
             self.was_speaking = True
 
 
         if is_confirmed:
+            if not self.was_speaking:
+                # User started speaking Grab the history
+                self.audio_buffer.extend(list(self.lookback_buffer)[:-1])
             self.audio_buffer.append(audio_chunk)
             self.was_speaking = True
         elif self.was_speaking:
@@ -108,7 +118,6 @@ class VoiceAssistant:
                     sd.sleep(100)
             except KeyboardInterrupt:
                 self.running = False
-
 
 if __name__ == "__main__":
     assistant = VoiceAssistant()
