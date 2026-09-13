@@ -40,3 +40,30 @@ class GroqLLM:
         except Exception as e:
             print(f"[LLM Error]: {e}")
             return "I'm sorry, I am having trouble thinking right now."
+
+    def stream_response(self, user_text: str):
+        if not user_text.strip():
+            return
+
+        self.chat_history.append({"role": "user", "content": user_text})
+
+        try:
+            print("LLM: response...")
+            stream = self.client.chat.completions.create(
+                model=self.model,
+                messages=self.chat_history,
+                temperature=0.7,
+                max_tokens=150,
+                stream=True,
+            )
+
+            full_response = ""
+            for chunk in stream:
+                token = chunk.choices[0].delta.content or ""
+                full_response += token
+                yield token
+
+            self.chat_history.append({"role": "assistant", "content": full_response})
+
+        except Exception as e:
+            print(f"[LLM Error]: {e}")
