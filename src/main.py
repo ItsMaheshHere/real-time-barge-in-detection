@@ -13,6 +13,7 @@ from bargein.vad import SileroVAD, VADFilter
 from bargein.stt import GroqSTT
 from bargein.llm import GroqLLM
 from bargein.tts import EdgeTTS
+from bargein.bargein import BargeInDetector
 
 SAMPLE_RATE = 16000
 FRAME_SIZE = 512
@@ -27,13 +28,10 @@ class VoiceAssistant:
         self.stt = GroqSTT()
         self.llm = GroqLLM()
         self.tts = EdgeTTS()
+        self.barge_in_detector = BargeInDetector(self.tts, self.vad_filter)
 
         self.audio_buffer = []
         self.was_speaking = False
-
-        # When this is True, we ignore VAD so the AI's voice through the speaker
-        # doesn't trigger a false barge-in.next replace this with real AEC.
-        self.is_ai_speaking = False
 
         self.speech_queue = queue.Queue()
         self.running = True
@@ -42,14 +40,17 @@ class VoiceAssistant:
         if status:
             print(f"Audio status: {status}")
 
-        # Skip VAD entirely while the AI is speaking to avoid false triggers.
-        if self.is_ai_speaking:
-            return
-
         audio_chunk = indata[:, 0].copy()
 
         prob = self.vad.get_speech_probability(audio_chunk)
         is_confirmed = self.vad_filter.process(prob >= 0.5)
+
+        # BARGE-IN CHECK: We check this on every single audio frame
+        if self.barge_in_detector.check_barge_in(is_confirmed):
+            # The user just interrupted! Clear old audio and start recording them instantly.
+            self.audio_buffer = []
+            self.was_speaking = True
+
 
         if is_confirmed:
             self.audio_buffer.append(audio_chunk)
@@ -75,11 +76,11 @@ class VoiceAssistant:
 
         print(f"Response:  {response}\n")
 
-        self.is_ai_speaking = True
+        self.barge_in_detector.start_ai_speech()
         try:
             self.tts.speak(response)
         finally:
-            self.is_ai_speaking = False
+            self.barge_in_detector.stop_ai_speech()
 
     def _worker(self):
         while self.running:
