@@ -1,7 +1,6 @@
 import torch
 from silero_vad import load_silero_vad
 
-
 class SileroVAD:
 
     def __init__(self, sample_rate=16000, threshold=0.5):

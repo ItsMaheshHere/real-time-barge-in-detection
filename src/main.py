@@ -78,19 +78,17 @@ class VoiceAssistant:
         if not text:
             return
 
-        print(f"\nRequest: {text}")
+        print(f"\nYou: {text}")
 
-        response = self.llm.generate_response(text)
-        if not response:
-            return
+        # stop_event lets barge-in instantly kill both pygame AND the TTS producer thread
+        stop_event = threading.Event()
 
-        print(f"Response:  {response}\n")
-
-        self.barge_in_detector.start_ai_speech()
+        self.barge_in_detector.start_ai_speech(stop_event=stop_event)
         try:
-            self.tts.speak(response)
+            self.tts.speak_streaming(self.llm.stream_response(text), stop_event=stop_event)
         finally:
             self.barge_in_detector.stop_ai_speech()
+            self.vad_filter.reset()
 
     def _worker(self):
         while self.running:
